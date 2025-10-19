@@ -1,0 +1,676 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>LordNine Boss Timer — Shared Link Ready</title>
+<style>
+  :root{
+    --bg:#071027; --panel:#071826; --muted:#9fb0c8; --accent:#60a5fa; --warn:#fb923c; --danger:#fb7185;
+    --glass: rgba(255,255,255,0.02);
+  }
+  *{box-sizing:border-box}
+  body{font-family:Inter,ui-sans-serif,system-ui,Segoe UI,Roboto,Arial;color:#e6eef8;background:linear-gradient(180deg,#041027 0%, #06121a 100%);margin:0;padding:26px}
+  .wrap{max-width:1100px;margin:0 auto}
+  header{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}
+  h1{margin:0;font-size:20px}
+  p.lead{margin:0;color:var(--muted);font-size:13px}
+  .grid{display:grid;grid-template-columns:1fr 380px;gap:16px}
+  .card{background:linear-gradient(180deg, rgba(255,255,255,0.015), rgba(255,255,255,0.01));border-radius:12px;padding:14px;box-shadow:0 8px 30px rgba(2,6,23,0.6);border:1px solid rgba(255,255,255,0.03)}
+  label{font-size:13px;color:var(--muted);display:block;margin-bottom:6px}
+  input, select {width:100%;padding:8px;border-radius:8px;border:1px solid rgba(255,255,255,0.04);background:transparent;color:inherit}
+  button{padding:8px 10px;border-radius:8px;border:0;background:var(--accent);color:#022;cursor:pointer;font-weight:600}
+  .ghost{background:transparent;border:1px solid rgba(255,255,255,0.04);color:var(--muted)}
+  .small{padding:6px 8px;font-size:13px}
+  .muted{color:var(--muted);font-size:13px}
+  .muted-small{color:var(--muted);font-size:12px}
+
+  .section-title{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
+  .list{display:flex;flex-direction:column;gap:8px}
+  .boss-row{display:grid;grid-template-columns:1fr 160px 200px 130px;gap:8px;align-items:center;padding:10px;border-radius:10px;background:var(--glass);border:1px solid rgba(255,255,255,0.02)}
+  .boss-row.fixed{grid-template-columns:1fr 200px 200px 130px}
+  .boss-meta{font-size:13px;color:var(--muted)}
+  .countdown{font-weight:700;font-variant-numeric:tabular-nums}
+  .actions{display:flex;gap:8px;justify-content:flex-end}
+  .btn-danger{background:var(--danger);color:#fff}
+  .btn-edit{background:transparent;border:1px solid rgba(255,255,255,0.06);color:var(--muted);padding:6px 8px;border-radius:8px}
+  .highlight{box-shadow:0 10px 30px rgba(96,165,250,0.07);border:1px solid rgba(96,165,250,0.08);background:linear-gradient(90deg, rgba(96,165,250,0.02), rgba(125,211,252,0.01))}
+  .alarm{border:1px solid rgba(251,146,60,0.22);box-shadow:0 8px 26px rgba(251,146,60,0.04);background:linear-gradient(90deg, rgba(251,146,60,0.03), rgba(251,146,60,0.01)); animation: pulse 1.6s infinite;}
+  @keyframes pulse{0%{transform:translateY(0)}50%{transform:translateY(-1px)}100%{transform:translateY(0)}}
+
+  .schedule-rows{display:flex;flex-direction:column;gap:6px;margin-bottom:8px}
+  .schedule-row{display:flex;gap:6px;align-items:center}
+  .schedule-row select, .schedule-row input[type="time"]{flex:1}
+  .schedule-row button{padding:6px 8px}
+  .muted-very{color:#8ea7c1;font-size:12px}
+
+  .controls{display:flex;gap:8px;justify-content:flex-end}
+  .top-actions{display:flex;gap:8px;align-items:center}
+  footer{margin-top:12px;color:var(--muted);font-size:12px;text-align:center}
+  @media (max-width:980px){.grid{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div>
+      <h1>LordNine Boss Timer</h1>
+      <p class="lead">Fixed schedule (Day + Time) and Hourly (hours after last kill). Share view via a link.</p>
+    </div>
+    <div class="top-actions">
+      <button id="copyLink" class="small">Copy Shareable Link</button>
+      <button id="exportBtn" class="small ghost">Export / Import</button>
+    </div>
+  </header>
+
+  <div class="grid">
+    <!-- Left: lists -->
+    <div>
+      <div class="card" style="margin-bottom:12px">
+        <div class="section-title">
+          <strong>Fixed Schedule Bosses</strong>
+          <div class="muted-small">Weekly repeating (multiple Day + Time entries)</div>
+        </div>
+        <div id="fixedList" class="list"></div>
+      </div>
+
+      <div class="card">
+        <div class="section-title">
+          <strong>Hourly Bosses</strong>
+          <div class="muted-small">Spawn time = hours after last kill</div>
+        </div>
+        <div id="hourlyList" class="list"></div>
+      </div>
+    </div>
+
+    <!-- Right: add/edit form & controls -->
+    <aside>
+      <div class="card">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+          <strong id="formTitle">Add Boss</strong>
+          <div class="muted-small">Top form is used for adding or editing</div>
+        </div>
+
+        <form id="bossForm" onsubmit="return false;">
+          <label for="bossName">Boss name</label>
+          <input id="bossName" type="text" placeholder="e.g., LordNine" required />
+
+          <div style="display:flex;gap:8px;margin-top:10px;margin-bottom:8px">
+            <div style="flex:1">
+              <label>Type</label>
+              <select id="bossType">
+                <option value="fixed">Fixed Schedule</option>
+                <option value="hourly">Hourly</option>
+              </select>
+            </div>
+            <div style="width:120px">
+              <label>Timezone (view)</label>
+              <select id="tzSelect">
+                <option value="local">Local</option>
+                <!-- we keep only local for now; link-based sharing uses ISO datetimes -->
+              </select>
+            </div>
+          </div>
+
+          <!-- Fixed schedule fields -->
+          <div id="fixedSection">
+            <label>Day & Time entries</label>
+            <div class="schedule-rows" id="scheduleRows">
+              <!-- JS will add one row by default -->
+            </div>
+            <div style="display:flex;gap:8px;justify-content:flex-end">
+              <button id="addScheduleRow" class="small ghost" type="button">+ Add Day & Time</button>
+            </div>
+            <div class="muted-very" style="margin-top:8px">You may add multiple Day + Time pairs (e.g., Mon 13:00, Thu 13:00).</div>
+          </div>
+
+          <!-- Hourly fields -->
+          <div id="hourlySection" style="display:none">
+            <label>Spawn Time (hours after last kill)</label>
+            <input id="spawnHours" type="number" min="0.01" step="0.01" placeholder="e.g., 2 (hours)" />
+            <div style="margin-top:8px">
+              <label>Last killed (optional)</label>
+              <input id="lastKill" type="datetime-local" />
+            </div>
+            <div class="muted-very" style="margin-top:8px">When "Mark as Killed" is pressed in the list, Last killed becomes 'now' and next spawn = now + spawn hours.</div>
+          </div>
+
+          <input type="hidden" id="editingId" />
+
+          <div style="display:flex;gap:8px;margin-top:12px;justify-content:flex-end">
+            <button id="cancelEdit" class="small ghost" type="button" style="display:none">Cancel</button>
+            <button id="submitBtn" class="small" type="button">Add Boss</button>
+          </div>
+        </form>
+      </div>
+
+      <div style="height:12px"></div>
+
+      <div class="card muted-small">
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <div>
+            <strong>Controls</strong><br>
+            <span class="muted-small">Quick actions</span>
+          </div>
+          <div style="text-align:right">
+            <button id="clearAll" class="ghost small">Clear All</button>
+            <button id="openExport" class="ghost small">Export / Import</button>
+          </div>
+        </div>
+
+        <div id="exportArea" style="display:none;margin-top:10px">
+          <label>Export / Import JSON</label>
+          <textarea id="exportJSON" style="width:100%;height:140px;background:#001;color:#cfe9ff;border-radius:8px;padding:8px"></textarea>
+          <div style="display:flex;gap:8px;margin-top:8px;justify-content:flex-end">
+            <button id="importDo" class="small">Import</button>
+            <button id="closeExport" class="small ghost">Close</button>
+          </div>
+        </div>
+      </div>
+
+      <footer>
+        Local time is used for countdowns. Shareable link encodes current boss list in the URL (base64 JSON).
+      </footer>
+    </aside>
+  </div>
+</div>
+
+<script>
+/* LordNine Boss Timer — updated with:
+   - Fixed: multiple Day+Time entries per boss
+   - Hourly: spawnHours (hours after last kill)
+   - Alarm color when <= 15 minutes
+   - Mark as Killed sets lastKill = now and next = lastKill + spawnHours
+   - Shareable URL encoding/decoding (base64 JSON in ?data=)
+   - localStorage persistence
+*/
+
+// Constants & helpers
+const LS_KEY = 'lordnine_bosses_v3';
+const WEEK = [
+  {label:'Mon', val:1},
+  {label:'Tue', val:2},
+  {label:'Wed', val:3},
+  {label:'Thu', val:4},
+  {label:'Fri', val:5},
+  {label:'Sat', val:6},
+  {label:'Sun', val:7}
+];
+const ALARM_THRESHOLD_MS = 15 * 60 * 1000; // 15 minutes
+
+function uid(){ return 'b_'+Math.random().toString(36).slice(2,9); }
+function now(){ return new Date(); }
+function iso(dt){ return dt ? (new Date(dt)).toISOString() : null; }
+
+// base64 encode/decode for safe URL usage
+function encodeData(obj){
+  const s = JSON.stringify(obj);
+  // use url-safe base64
+  return btoa(unescape(encodeURIComponent(s))).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
+}
+function decodeData(str){
+  try{
+    str = str.replace(/-/g,'+').replace(/_/g,'/');
+    // pad
+    while(str.length % 4) str += '=';
+    const s = decodeURIComponent(escape(atob(str)));
+    return JSON.parse(s);
+  }catch(e){
+    return null;
+  }
+}
+
+// Storage
+function loadAll(){ try{ const raw = localStorage.getItem(LS_KEY); return raw ? JSON.parse(raw) : []; }catch(e){ return []; } }
+function saveAll(arr){ localStorage.setItem(LS_KEY, JSON.stringify(arr)); }
+
+// Date helpers
+function cloneDate(d){ return new Date(d.getTime()); }
+
+// Next occurrence calculation
+// For fixed boss, boss.schedules = [ { day:1..7, time:'HH:MM' }, ... ]
+function nextFixedOccurrenceFromSchedules(schedules){
+  if(!schedules || schedules.length===0) return null;
+  const nowDate = new Date();
+  let candidates = [];
+  for(const s of schedules){
+    // map day 1..7 to JS day: 0..6 (Sun..Sat) => our mapping is 1=Mon...7=Sun -> jsDay = d % 7
+    const jsDay = s.day % 7; // 7 -> 0 (Sun)
+    const [hh, mm] = (s.time || '00:00').split(':').map(Number);
+    const cand = new Date(nowDate);
+    const curDay = cand.getDay(); // 0..6
+    let diff = jsDay - curDay;
+    if(diff < 0) diff += 7;
+    cand.setDate(cand.getDate() + diff);
+    cand.setHours(hh, mm, 0, 0);
+    if(cand <= nowDate){
+      cand.setDate(cand.getDate() + 7);
+    }
+    candidates.push(cand);
+  }
+  candidates.sort((a,b)=>a - b);
+  return candidates[0];
+}
+
+// Hourly: spawnHours (decimal allowed)
+function nextHourlyOccurrence(lastKillISO, spawnHours){
+  if(!spawnHours && spawnHours !== 0) return null;
+  const nowDate = new Date();
+  let base;
+  if(lastKillISO) base = new Date(lastKillISO);
+  else base = new Date(); // treat missing lastKill as now
+  const intervalMs = spawnHours * 3600 * 1000;
+  let next = new Date(base.getTime() + intervalMs);
+  if(lastKillISO){
+    // advance until > now
+    while(next <= nowDate){
+      next = new Date(next.getTime() + intervalMs);
+    }
+  } else {
+    // base is now, so next can be now + spawnHours
+    if(next <= nowDate) next = new Date(nowDate.getTime() + intervalMs);
+  }
+  return next;
+}
+
+// UI elements
+const fixedList = document.getElementById('fixedList');
+const hourlyList = document.getElementById('hourlyList');
+const bossType = document.getElementById('bossType');
+const fixedSection = document.getElementById('fixedSection');
+const hourlySection = document.getElementById('hourlySection');
+const scheduleRows = document.getElementById('scheduleRows');
+const addScheduleRowBtn = document.getElementById('addScheduleRow');
+const spawnHours = document.getElementById('spawnHours');
+const lastKill = document.getElementById('lastKill');
+const bossName = document.getElementById('bossName');
+const submitBtn = document.getElementById('submitBtn');
+const cancelEdit = document.getElementById('cancelEdit');
+const formTitle = document.getElementById('formTitle');
+const editingId = document.getElementById('editingId');
+const clearAllBtn = document.getElementById('clearAll');
+const exportBtn = document.getElementById('exportBtn');
+const exportArea = document.getElementById('exportArea');
+const exportJSON = document.getElementById('exportJSON');
+const importDo = document.getElementById('importDo');
+const closeExport = document.getElementById('closeExport');
+const openExport = document.getElementById('openExport');
+const copyLinkBtn = document.getElementById('copyLink');
+
+// Toggle form sections
+bossType.addEventListener('change', ()=>{
+  if(bossType.value === 'fixed'){ fixedSection.style.display = ''; hourlySection.style.display = 'none'; }
+  else { fixedSection.style.display = 'none'; hourlySection.style.display = ''; }
+});
+
+// Manage schedule rows inside form (for fixed)
+function createScheduleRow(day=1, time='12:00'){
+  const row = document.createElement('div');
+  row.className = 'schedule-row';
+  const select = document.createElement('select');
+  WEEK.forEach(w=>{ const o = document.createElement('option'); o.value = w.val; o.textContent = w.label; if(w.val===day) o.selected=true; select.appendChild(o); });
+  const timeInput = document.createElement('input');
+  timeInput.type = 'time';
+  timeInput.value = time;
+  const del = document.createElement('button');
+  del.type = 'button';
+  del.className = 'small ghost';
+  del.textContent = 'Remove';
+  del.addEventListener('click', ()=>{ row.remove(); });
+  row.appendChild(select);
+  row.appendChild(timeInput);
+  row.appendChild(del);
+  return row;
+}
+addScheduleRowBtn.addEventListener('click', ()=>{
+  scheduleRows.appendChild(createScheduleRow(1, '13:00'));
+});
+
+// Form actions: add/edit
+function resetForm(){
+  formTitle.textContent = 'Add Boss';
+  submitBtn.textContent = 'Add Boss';
+  cancelEdit.style.display = 'none';
+  editingId.value = '';
+  bossName.value = '';
+  bossType.value = 'fixed';
+  fixedSection.style.display = '';
+  hourlySection.style.display = 'none';
+  spawnHours.value = '';
+  lastKill.value = '';
+  scheduleRows.innerHTML = '';
+  scheduleRows.appendChild(createScheduleRow(1,'13:00'));
+}
+cancelEdit.addEventListener('click', resetForm);
+
+function readForm(){
+  const name = bossName.value.trim();
+  if(!name) { alert('Boss name required'); return null; }
+  const type = bossType.value;
+  if(type === 'fixed'){
+    const rows = Array.from(scheduleRows.children);
+    const schedules = rows.map(r=>{
+      const d = Number(r.querySelector('select').value);
+      const t = r.querySelector('input[type="time"]').value;
+      return { day:d, time:t };
+    }).filter(s=>s.time);
+    if(schedules.length === 0){ alert('Add at least one Day + Time'); return null; }
+    return { name, type:'fixed', schedules };
+  } else {
+    const hours = parseFloat(spawnHours.value);
+    if(isNaN(hours) || hours < 0){ alert('Spawn Hours must be a number >= 0'); return null; }
+    const lk = lastKill.value ? new Date(lastKill.value).toISOString() : null;
+    return { name, type:'hourly', spawnHours: hours, lastKill: lk };
+  }
+}
+
+// Add/update boss
+submitBtn.addEventListener('click', ()=>{
+  const payload = readForm();
+  if(!payload) return;
+  const all = loadAll();
+  if(editingId.value){
+    const id = editingId.value;
+    const idx = all.findIndex(x=>x.id===id);
+    if(idx !== -1){
+      all[idx] = { ...all[idx], ...payload };
+      saveAll(all);
+      resetForm();
+      renderAll();
+    }
+  } else {
+    const obj = { id: uid(), ...payload, created: new Date().toISOString() };
+    all.push(obj);
+    saveAll(all);
+    resetForm();
+    renderAll();
+  }
+});
+
+// Render lists
+function renderAll(){
+  fixedList.innerHTML = '';
+  hourlyList.innerHTML = '';
+  const all = loadAll();
+  const fixed = all.filter(b=>b.type==='fixed');
+  const hourly = all.filter(b=>b.type==='hourly');
+
+  // sort by next occurrence
+  fixed.sort((a,b)=> {
+    const na = nextFixedOccurrenceFromSchedules(a.schedules);
+    const nb = nextFixedOccurrenceFromSchedules(b.schedules);
+    return (na||Infinity) - (nb||Infinity);
+  });
+  hourly.sort((a,b)=> {
+    const na = nextHourlyOccurrence(a.lastKill, a.spawnHours);
+    const nb = nextHourlyOccurrence(b.lastKill, b.spawnHours);
+    return (na||Infinity) - (nb||Infinity);
+  });
+
+  fixed.forEach(b => fixedList.appendChild(renderFixedRow(b)));
+  hourly.forEach(b => hourlyList.appendChild(renderHourlyRow(b)));
+
+  highlightNextOverall();
+}
+
+function formatShort(dt){
+  if(!dt) return '-';
+  const d = new Date(dt);
+  return d.toLocaleString();
+}
+
+function renderFixedRow(boss){
+  const el = document.createElement('div');
+  el.className = 'boss-row fixed';
+  el.id = boss.id;
+
+  // Name + meta
+  const nameCol = document.createElement('div');
+  const schedLabel = boss.schedules.map(s=>`${weekdayLabel(s.day)} ${s.time}`).join(' • ');
+  nameCol.innerHTML = `<div style="display:flex;flex-direction:column"><div style="display:flex;align-items:center;gap:8px"><strong>${escapeHtml(boss.name)}</strong></div><div class="boss-meta">${escapeHtml(schedLabel)}</div></div>`;
+
+  // Next
+  const next = nextFixedOccurrenceFromSchedules(boss.schedules);
+  const nextCol = document.createElement('div');
+  nextCol.innerHTML = `<div class="muted-small">Next</div><div class="countdown" data-next="${next ? next.toISOString() : ''}">${next ? timeDiffText(next) : '-'}</div>`;
+
+  // Meta: show next date/time
+  const metaCol = document.createElement('div');
+  metaCol.innerHTML = `<div class="muted-small">Next at</div><div class="muted-small">${next ? formatShort(next) : '-'}</div>`;
+
+  const actions = document.createElement('div'); actions.className='actions';
+  actions.innerHTML = `
+    <button class="btn-edit btn" data-id="${boss.id}" data-type="edit">Edit</button>
+    <button class="btn small btn-danger" data-id="${boss.id}" data-type="delete">Delete</button>
+  `;
+
+  el.appendChild(nameCol); el.appendChild(nextCol); el.appendChild(metaCol); el.appendChild(actions);
+
+  actions.querySelector('[data-type="delete"]').addEventListener('click', ()=>{
+    if(confirm('Delete this fixed schedule boss?')) { deleteBoss(boss.id); }
+  });
+  actions.querySelector('[data-type="edit"]').addEventListener('click', ()=>{
+    populateFormForEdit(boss);
+  });
+
+  return el;
+}
+
+function renderHourlyRow(boss){
+  const el = document.createElement('div');
+  el.className = 'boss-row';
+  el.id = boss.id;
+
+  const nameCol = document.createElement('div');
+  nameCol.innerHTML = `<div style="display:flex;flex-direction:column"><div style="display:flex;align-items:center;gap:8px"><strong>${escapeHtml(boss.name)}</strong></div><div class="boss-meta">Spawn after ${boss.spawnHours} hr(s)</div></div>`;
+
+  const next = nextHourlyOccurrence(boss.lastKill, boss.spawnHours);
+  const nextCol = document.createElement('div');
+  nextCol.innerHTML = `<div class="muted-small">Next</div><div class="countdown" data-next="${next ? next.toISOString() : ''}">${next ? timeDiffText(next) : '-'}</div>`;
+
+  const metaCol = document.createElement('div');
+  metaCol.innerHTML = `<div class="muted-small">Last killed</div><div class="muted-small">${boss.lastKill ? formatShort(boss.lastKill) : '-'}</div>`;
+
+  const actions = document.createElement('div'); actions.className='actions';
+  actions.innerHTML = `
+    <button class="btn small" data-id="${boss.id}" data-type="mark">Mark as Killed</button>
+    <button class="btn-edit btn" data-id="${boss.id}" data-type="edit">Edit</button>
+    <button class="btn small btn-danger" data-id="${boss.id}" data-type="delete">Delete</button>
+  `;
+
+  el.appendChild(nameCol); el.appendChild(nextCol); el.appendChild(metaCol); el.appendChild(actions);
+
+  actions.querySelector('[data-type="delete"]').addEventListener('click', ()=>{
+    if(confirm('Delete this hourly boss?')) deleteBoss(boss.id);
+  });
+  actions.querySelector('[data-type="edit"]').addEventListener('click', ()=>{
+    populateFormForEdit(boss);
+  });
+  actions.querySelector('[data-type="mark"]').addEventListener('click', ()=>{
+    // set lastKill = now and save
+    updateBoss(boss.id, { lastKill: new Date().toISOString() });
+  });
+
+  return el;
+}
+
+// helper functions
+function weekdayLabel(v){ const map = {1:'Mon',2:'Tue',3:'Wed',4:'Thu',5:'Fri',6:'Sat',7:'Sun'}; return map[v] || v; }
+function escapeHtml(s){ if(!s) return ''; return s.replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+// CRUD
+function addBoss(obj){ const all = loadAll(); all.push(obj); saveAll(all); renderAll(); }
+function updateBoss(id, diff){ const all = loadAll(); const idx = all.findIndex(x=>x.id===id); if(idx!==-1){ all[idx] = { ...all[idx], ...diff }; saveAll(all); renderAll(); } }
+function deleteBoss(id){ const all = loadAll().filter(x=>x.id!==id); saveAll(all); renderAll(); }
+function clearAll(){ if(confirm('Clear all boss entries? This cannot be undone.')){ localStorage.removeItem(LS_KEY); renderAll(); } }
+
+// Editing
+function populateFormForEdit(boss){
+  formTitle.textContent = 'Edit Boss';
+  submitBtn.textContent = 'Update Boss';
+  cancelEdit.style.display = '';
+  editingId.value = boss.id;
+  bossName.value = boss.name || '';
+  bossType.value = boss.type;
+  if(boss.type === 'fixed'){
+    fixedSection.style.display = ''; hourlySection.style.display = 'none';
+    scheduleRows.innerHTML = '';
+    (boss.schedules || []).forEach(s => scheduleRows.appendChild(createScheduleRow(s.day, s.time)));
+  } else {
+    fixedSection.style.display = 'none'; hourlySection.style.display = '';
+    spawnHours.value = boss.spawnHours;
+    lastKill.value = boss.lastKill ? (new Date(boss.lastKill)).toISOString().slice(0,16) : '';
+  }
+  window.scrollTo({top:0,behavior:'smooth'});
+}
+
+// Countdown tick
+function timeDiffText(future){
+  if(!future) return '-';
+  const diff = future - new Date();
+  if(diff <= 0) return '00:00:00';
+  const s = Math.floor(diff / 1000);
+  const hh = Math.floor(s / 3600).toString().padStart(2,'0');
+  const mm = Math.floor((s % 3600) / 60).toString().padStart(2,'0');
+  const ss = Math.floor(s % 60).toString().padStart(2,'0');
+  if(Number(hh) > 99){
+    const days = Math.floor(s / 86400);
+    return `${days}d ${hh}:${mm}`;
+  }
+  return `${hh}:${mm}:${ss}`;
+}
+
+// Tick updates countdown displays and alarm highlighting
+function tick(){
+  document.querySelectorAll('.countdown').forEach(el=>{
+    const nextIso = el.dataset.next;
+    if(!nextIso) return;
+    const next = new Date(nextIso);
+    el.textContent = timeDiffText(next);
+  });
+
+  // highlight rows within 15 minutes and clear old alarms
+  document.querySelectorAll('.boss-row').forEach(row=>{
+    row.classList.remove('alarm','highlight');
+  });
+  highlightNextOverall();
+
+  // apply alarm class for rows <= 15min
+  document.querySelectorAll('.boss-row').forEach(row=>{
+    const cd = row.querySelector('.countdown');
+    if(!cd) return;
+    const nextIso = cd.dataset.next;
+    if(!nextIso) return;
+    const diff = new Date(nextIso) - new Date();
+    if(diff <= ALARM_THRESHOLD_MS && diff > 0){
+      row.classList.add('alarm');
+    }
+  });
+}
+
+// highlight nearest overall next (only one)
+function highlightNextOverall(){
+  const all = loadAll();
+  let nearest = null, nid = null;
+  for(const b of all){
+    let next;
+    if(b.type === 'fixed') next = nextFixedOccurrenceFromSchedules(b.schedules);
+    else next = nextHourlyOccurrence(b.lastKill, b.spawnHours);
+    if(!next) continue;
+    if(!nearest || next < nearest){ nearest = next; nid = b.id; }
+  }
+  if(nid){
+    const el = document.getElementById(nid);
+    if(el) el.classList.add('highlight');
+  }
+}
+
+// initial seed if none
+function seedIfEmpty(){
+  const all = loadAll();
+  if(all.length === 0){
+    const sample = [
+      { id: uid(), name:'LordNine', type:'fixed', schedules:[{day:1,time:'13:00'},{day:4,time:'13:00'}], created: new Date().toISOString() },
+      { id: uid(), name:'NightShade', type:'hourly', spawnHours:2, lastKill: new Date(Date.now() - 30*60000).toISOString(), created: new Date().toISOString() }
+    ];
+    saveAll(sample);
+  }
+}
+
+// Import/Export UI
+openExport.addEventListener('click', ()=>{
+  exportArea.style.display = exportArea.style.display === 'none' ? '' : 'none';
+  if(exportArea.style.display === '') exportJSON.value = JSON.stringify(loadAll(), null, 2);
+});
+closeExport.addEventListener('click', ()=>{ exportArea.style.display = 'none'; });
+importDo.addEventListener('click', ()=>{
+  try{
+    const parsed = JSON.parse(exportJSON.value);
+    if(!Array.isArray(parsed)) throw new Error('Expected an array');
+    if(confirm('Import will replace existing entries. Continue?')){ saveAll(parsed); renderAll(); exportArea.style.display = 'none'; }
+  }catch(e){ alert('Import failed: ' + e.message); }
+});
+
+// Shareable link: encode current saved bosses into URL param ?data={base64}
+copyLinkBtn.addEventListener('click', async ()=>{
+  const data = loadAll();
+  const encoded = encodeData(data);
+  const url = window.location.origin + window.location.pathname + '?data=' + encoded;
+  try{
+    await navigator.clipboard.writeText(url);
+    copyLinkBtn.textContent = 'Link Copied!';
+    setTimeout(()=> copyLinkBtn.textContent = 'Copy Shareable Link', 1600);
+  }catch(e){
+    prompt('Copy this link:', url);
+  }
+});
+
+// On load: if ?data= present, ask to import or merge
+function handleUrlDataOnLoad(){
+  const params = new URLSearchParams(window.location.search);
+  const d = params.get('data');
+  if(!d) return;
+  const parsed = decodeData(d);
+  if(!parsed){ alert('Shared link contains invalid data'); return; }
+  // Ask user whether to replace or merge
+  const choice = confirm('Shared link detected. Press OK to replace your current list with the shared list. Press Cancel to merge.');
+  if(choice){
+    saveAll(parsed);
+    renderAll();
+  } else {
+    // merge: append any non-duplicate ids (if same id exists, skip)
+    const current = loadAll();
+    const existingIds = new Set(current.map(x=>x.id));
+    for(const item of parsed){
+      if(!existingIds.has(item.id)) current.push(item);
+    }
+    saveAll(current);
+    renderAll();
+  }
+}
+
+// Utilities to read & set data
+function deleteBoss(id){ const all = loadAll().filter(x=>x.id!==id); saveAll(all); renderAll(); }
+function updateBoss(id, diff){ const all = loadAll(); const idx = all.findIndex(x=>x.id===id); if(idx!==-1){ all[idx] = { ...all[idx], ...diff }; saveAll(all); renderAll(); } }
+
+// Helpers for page interactions (escape previously defined functions)
+function escapeHtml2(s){ if(!s) return ''; return s.replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+// wire clearAll
+clearAllBtn.addEventListener('click', clearAll);
+
+// populate default first schedule row
+scheduleRows.appendChild(createScheduleRow(1,'13:00'));
+
+// initial seed & render
+seedIfEmpty();
+renderAll();
+tick();
+setInterval(tick, 1000);
+
+// On load handle ?data param
+handleUrlDataOnLoad();
+
+</script>
+</body>
+</html>
